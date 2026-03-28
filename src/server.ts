@@ -19,26 +19,33 @@ import { runWithBuildCredentials } from './runtime/buildCredentials';
 // if INSFORGE_REFRESH_TOKEN is also provided.
 // ---------------------------------------------------------------------------
 (function bootstrapInsforgeCredentials() {
-  const accessToken = process.env.INSFORGE_ACCESS_TOKEN;
-  const refreshToken = process.env.INSFORGE_REFRESH_TOKEN;
+  const accessToken = process.env.INSFORGE_ACCESS_TOKEN?.trim();
+  const refreshToken = process.env.INSFORGE_REFRESH_TOKEN?.trim();
   if (!accessToken && !refreshToken) return;
 
   const credDir = path.join(os.homedir(), '.config', 'insforge');
   const credFile = path.join(credDir, 'credentials.json');
 
-  // Don't overwrite if credentials already exist (e.g. local dev with CLI login)
-  if (fs.existsSync(credFile)) {
-    log.info('InsForge CLI credentials already present, skipping bootstrap');
-    return;
-  }
-
   try {
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(credFile)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(credFile, 'utf8')) as Record<string, unknown>;
+      } catch {
+        // If existing credentials are corrupt, rewrite from env below.
+        existing = {};
+      }
+    }
+
+    const merged = {
+      ...existing,
+      ...(accessToken ? { access_token: accessToken } : {}),
+      ...(refreshToken ? { refresh_token: refreshToken } : {}),
+    };
+
     fs.mkdirSync(credDir, { recursive: true });
-    fs.writeFileSync(credFile, JSON.stringify({
-      access_token: accessToken ?? '',
-      refresh_token: refreshToken ?? '',
-    }, null, 2), { mode: 0o600 });
-    log.info('Bootstrapped InsForge CLI credentials from environment');
+    fs.writeFileSync(credFile, JSON.stringify(merged, null, 2), { mode: 0o600 });
+    log.info('Bootstrapped/updated InsForge CLI credentials from environment');
   } catch (err) {
     log.warn('Failed to bootstrap InsForge CLI credentials', { error: String(err) });
   }
@@ -81,8 +88,8 @@ function getMissingConfigKeys(credentials: BuildCredentialOverrides = {}): strin
   // or a locally stored credentials file (dev machines with `npx @insforge/cli login`).
   const hasCliAuth =
     !!(credentials.insforgeAccessToken ?? process.env.INSFORGE_ACCESS_TOKEN)?.trim() ||
-    !!process.env.INSFORGE_REFRESH_TOKEN?.trim() ||
-    require('fs').existsSync(require('path').join(require('os').homedir(), '.config', 'insforge', 'credentials.json'));
+    !!(credentials.insforgeRefreshToken ?? process.env.INSFORGE_REFRESH_TOKEN)?.trim() ||
+    fs.existsSync(path.join(os.homedir(), '.config', 'insforge', 'credentials.json'));
 
   if (!hasCliAuth) {
     required.push(['INSFORGE_ACCESS_TOKEN', undefined]);

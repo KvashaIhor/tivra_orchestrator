@@ -105,6 +105,7 @@ export const BuildCredentialOverridesSchema = z
     insforgeBaseUrl: z.string().url().optional(),
     insforgeAnonKey: z.string().min(1).optional(),
     insforgeAccessToken: z.string().min(1).optional(),
+    insforgeRefreshToken: z.string().min(1).optional(),
     insforgeProjectId: z.string().min(1).optional(),
   })
   .partial();

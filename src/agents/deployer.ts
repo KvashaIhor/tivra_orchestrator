@@ -17,18 +17,22 @@ const CLI_CREDENTIALS_PATH = path.join(os.homedir(), '.config', 'insforge', 'cre
 
 /** Build env vars that allow @insforge/cli to run non-interactively. */
 function buildCliEnv(): NodeJS.ProcessEnv {
-  const { insforgeAccessToken, insforgeProjectId } = getBuildCredentials();
+  const { insforgeAccessToken, insforgeRefreshToken, insforgeProjectId } = getBuildCredentials();
   const explicitAccessToken = insforgeAccessToken?.trim();
+  const explicitRefreshToken = insforgeRefreshToken?.trim();
   const envAccessToken = process.env.INSFORGE_ACCESS_TOKEN?.trim();
-  const hasRefreshToken = !!process.env.INSFORGE_REFRESH_TOKEN?.trim();
-  const hasStoredCredentials = fs.existsSync(CLI_CREDENTIALS_PATH);
-  const accessToken = explicitAccessToken || (!hasRefreshToken && !hasStoredCredentials ? envAccessToken : undefined);
+  const envRefreshToken = process.env.INSFORGE_REFRESH_TOKEN?.trim();
+  const accessToken = explicitAccessToken || envAccessToken;
+  const refreshToken = explicitRefreshToken || envRefreshToken;
   const projectId = insforgeProjectId ?? process.env.INSFORGE_PROJECT_ID;
 
   return {
     ...process.env,
     ...(accessToken
       ? { INSFORGE_ACCESS_TOKEN: accessToken }
+      : {}),
+    ...(refreshToken
+      ? { INSFORGE_REFRESH_TOKEN: refreshToken }
       : {}),
     ...(projectId
       ? { INSFORGE_PROJECT_ID: projectId }
