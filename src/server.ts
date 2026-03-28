@@ -74,9 +74,19 @@ function getMissingConfigKeys(credentials: BuildCredentialOverrides = {}): strin
     ['ANTHROPIC_API_KEY', credentials.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY],
     ['INSFORGE_BASE_URL', credentials.insforgeBaseUrl ?? process.env.INSFORGE_BASE_URL],
     ['INSFORGE_ANON_KEY', credentials.insforgeAnonKey ?? process.env.INSFORGE_ANON_KEY],
-    ['INSFORGE_ACCESS_TOKEN', credentials.insforgeAccessToken ?? process.env.INSFORGE_ACCESS_TOKEN],
     ['INSFORGE_PROJECT_ID', credentials.insforgeProjectId ?? process.env.INSFORGE_PROJECT_ID],
   ];
+
+  // CLI auth: accept either an explicit access token, a refresh token (bootstraps credentials on startup),
+  // or a locally stored credentials file (dev machines with `npx @insforge/cli login`).
+  const hasCliAuth =
+    !!(credentials.insforgeAccessToken ?? process.env.INSFORGE_ACCESS_TOKEN)?.trim() ||
+    !!process.env.INSFORGE_REFRESH_TOKEN?.trim() ||
+    require('fs').existsSync(require('path').join(require('os').homedir(), '.config', 'insforge', 'credentials.json'));
+
+  if (!hasCliAuth) {
+    required.push(['INSFORGE_ACCESS_TOKEN', undefined]);
+  }
 
   return required
     .filter(([, value]) => typeof value !== 'string' || value.trim().length === 0)
