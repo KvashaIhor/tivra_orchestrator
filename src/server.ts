@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { BuildState, AgentEvent, EmitFn, BuildRequestSchema, BuildCredentialOverrides } from './types/spec';
 import { parsePromptToSpec } from './agents/specParser';
 import { provisionBackend } from './agents/backendProvisioner';
@@ -8,6 +11,38 @@ import { generateCode } from './agents/codeGenerator';
 import { deployApp } from './agents/deployer';
 import { log } from './utils/log';
 import { runWithBuildCredentials } from './runtime/buildCredentials';
+
+// ---------------------------------------------------------------------------
+// Bootstrap InsForge CLI credentials from env vars (for headless server environments like Render).
+// If INSFORGE_ACCESS_TOKEN is set, write it to ~/.config/insforge/credentials.json so the CLI
+// can use it without prompting for browser OAuth. The CLI will auto-refresh using the refresh token
+// if INSFORGE_REFRESH_TOKEN is also provided.
+// ---------------------------------------------------------------------------
+(function bootstrapInsforgeCredentials() {
+  const accessToken = process.env.INSFORGE_ACCESS_TOKEN;
+  const refreshToken = process.env.INSFORGE_REFRESH_TOKEN;
+  if (!accessToken && !refreshToken) return;
+
+  const credDir = path.join(os.homedir(), '.config', 'insforge');
+  const credFile = path.join(credDir, 'credentials.json');
+
+  // Don't overwrite if credentials already exist (e.g. local dev with CLI login)
+  if (fs.existsSync(credFile)) {
+    log.info('InsForge CLI credentials already present, skipping bootstrap');
+    return;
+  }
+
+  try {
+    fs.mkdirSync(credDir, { recursive: true });
+    fs.writeFileSync(credFile, JSON.stringify({
+      access_token: accessToken ?? '',
+      refresh_token: refreshToken ?? '',
+    }, null, 2), { mode: 0o600 });
+    log.info('Bootstrapped InsForge CLI credentials from environment');
+  } catch (err) {
+    log.warn('Failed to bootstrap InsForge CLI credentials', { error: String(err) });
+  }
+})();
 
 const app = express();
 app.use(express.json());
@@ -91,7 +126,7 @@ app.post('/api/build', async (req: Request, res: Response) => {
   const missingKeys = getMissingConfigKeys(credentials);
   if (missingKeys.length > 0) {
     res.status(400).json({
-      error: `Missing required configuration: ${missingKeys.join(', ')}`,
+      error: `You have not configured following keys: ${missingKeys.join(', ')}. Please make sure to provide your Anthropic API KEY and InsForge credentials in "PROVIDER CREDENTIALS" field.`,
       missingKeys,
     });
     return;
