@@ -34,6 +34,20 @@ app.use((req, res, next) => {
 const builds = new Map<string, BuildState>();
 const sseClients = new Map<string, Response[]>();
 
+function getMissingConfigKeys(credentials: BuildCredentialOverrides = {}): string[] {
+  const required: Array<[string, string | undefined]> = [
+    ['ANTHROPIC_API_KEY', credentials.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY],
+    ['INSFORGE_BASE_URL', credentials.insforgeBaseUrl ?? process.env.INSFORGE_BASE_URL],
+    ['INSFORGE_ANON_KEY', credentials.insforgeAnonKey ?? process.env.INSFORGE_ANON_KEY],
+    ['INSFORGE_ACCESS_TOKEN', credentials.insforgeAccessToken ?? process.env.INSFORGE_ACCESS_TOKEN],
+    ['INSFORGE_PROJECT_ID', credentials.insforgeProjectId ?? process.env.INSFORGE_PROJECT_ID],
+  ];
+
+  return required
+    .filter(([, value]) => typeof value !== 'string' || value.trim().length === 0)
+    .map(([key]) => key);
+}
+
 function sanitizeUserMessage(message: string): string {
   return message
     .replace(/\b[Cc]laude\b/g, 'the model')
@@ -74,6 +88,15 @@ app.post('/api/build', async (req: Request, res: Response) => {
     Object.entries(parsed.data.credentials ?? {}).filter(([, value]) => typeof value === 'string' && value.trim().length > 0),
   ) as BuildCredentialOverrides;
 
+  const missingKeys = getMissingConfigKeys(credentials);
+  if (missingKeys.length > 0) {
+    res.status(400).json({
+      error: `Missing required configuration: ${missingKeys.join(', ')}`,
+      missingKeys,
+    });
+    return;
+  }
+
   const buildId = crypto.randomUUID();
   const state: BuildState = { id: buildId, status: 'pending', events: [] };
   builds.set(buildId, state);
@@ -96,6 +119,34 @@ app.post('/api/build', async (req: Request, res: Response) => {
     state.events.push(event);
     broadcast(buildId, event);
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/preflight  — validate effective config before build starts
+// ---------------------------------------------------------------------------
+
+app.post('/api/preflight', (req: Request, res: Response) => {
+  const parsed = BuildRequestSchema.partial({ prompt: true }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid payload' });
+    return;
+  }
+
+  const credentials = Object.fromEntries(
+    Object.entries(parsed.data.credentials ?? {}).filter(([, value]) => typeof value === 'string' && value.trim().length > 0),
+  ) as BuildCredentialOverrides;
+
+  const missingKeys = getMissingConfigKeys(credentials);
+  if (missingKeys.length > 0) {
+    res.status(400).json({
+      ok: false,
+      error: `Missing required configuration: ${missingKeys.join(', ')}`,
+      missingKeys,
+    });
+    return;
+  }
+
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
