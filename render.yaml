@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: orchestrator
+    runtime: node
+    rootDir: .
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
