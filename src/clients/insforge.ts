@@ -14,6 +14,8 @@
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { log } from '../utils/log';
 import { LiveTableSchema } from '../types/spec';
@@ -23,11 +25,16 @@ const execFileAsync = promisify(execFile);
 
 // Workspace root — where `npx @insforge/cli link` was run and .insforge lives.
 const WORKSPACE_ROOT = path.resolve(__dirname, '../../../../');
+const CLI_CREDENTIALS_PATH = path.join(os.homedir(), '.config', 'insforge', 'credentials.json');
 
 /** Build env vars that allow @insforge/cli to run non-interactively. */
 function buildCliEnv(): NodeJS.ProcessEnv {
   const { insforgeAccessToken, insforgeProjectId } = getBuildCredentials();
-  const accessToken = insforgeAccessToken ?? process.env.INSFORGE_ACCESS_TOKEN;
+  const explicitAccessToken = insforgeAccessToken?.trim();
+  const envAccessToken = process.env.INSFORGE_ACCESS_TOKEN?.trim();
+  const hasRefreshToken = !!process.env.INSFORGE_REFRESH_TOKEN?.trim();
+  const hasStoredCredentials = fs.existsSync(CLI_CREDENTIALS_PATH);
+  const accessToken = explicitAccessToken || (!hasRefreshToken && !hasStoredCredentials ? envAccessToken : undefined);
   const projectId = insforgeProjectId ?? process.env.INSFORGE_PROJECT_ID;
 
   return {
