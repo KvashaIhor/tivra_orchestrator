@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import crypto from 'crypto';
-import QRCode from 'qrcode';
 import { BuildState, AgentEvent, EmitFn, BuildRequestSchema, BuildCredentialOverrides } from './types/spec';
 import { parsePromptToSpec } from './agents/specParser';
 import { provisionBackend } from './agents/backendProvisioner';
